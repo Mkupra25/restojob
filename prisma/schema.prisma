@@ -1,0 +1,279 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  EMPLOYEE
+  MANAGER
+  ADMIN
+}
+
+enum EmploymentStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  ENDED
+}
+
+enum RatingType {
+  CUSTOMER
+  COWORKER
+  MANAGER
+}
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  TEMPORARY
+}
+
+model User {
+  id                String             @id @default(cuid())
+  email             String             @unique
+  passwordHash      String
+  firstName         String
+  lastName          String
+  role              Role               @default(CUSTOMER)
+  city              String?
+  country           String?
+  isSuspended       Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  employeeProfile   Employee?
+  managerProfile    Manager?
+  ratingsGiven      Rating[]           @relation("Rater")
+  reviews           Review[]
+  restaurantRatings RestaurantRating[]
+  reports           Report[]
+  notifications     Notification[]
+  applications      JobApplication[]
+}
+
+model Restaurant {
+  id              String             @id @default(cuid())
+  name            String
+  slug            String             @unique
+  description     String
+  cuisine         String
+  category        String
+  priceRange      String
+  country         String
+  city            String
+  neighborhood    String?
+  address         String
+  latitude        Float?
+  longitude       Float?
+  phone           String?
+  website         String?
+  openingHours    String?
+  verified        Boolean            @default(false)
+  createdAt       DateTime           @default(now())
+  manager         Manager?
+  employments     Employment[]
+  jobs            Job[]
+  ratings         RestaurantRating[]
+  employeeRatings Rating[]
+  reviews         Review[]
+  managerRatings  ManagerRating[]
+}
+
+model Employee {
+  id                  String          @id @default(cuid())
+  userId              String          @unique
+  position            String
+  profileBio          String?
+  user                User            @relation(fields: [userId], references: [id])
+  employments         Employment[]
+  ratings             Rating[]        @relation("TargetEmployee")
+  badges              EmployeeBadge[]
+  qrTokens            QrToken[]
+  reviews             Review[]
+  managerRatingsGiven ManagerRating[]
+}
+
+model Manager {
+  id             String          @id @default(cuid())
+  userId         String          @unique
+  restaurantId   String          @unique
+  verified       Boolean         @default(false)
+  user           User            @relation(fields: [userId], references: [id])
+  restaurant     Restaurant      @relation(fields: [restaurantId], references: [id])
+  managerRatings ManagerRating[] @relation("ManagerReceived")
+}
+
+model Employment {
+  id           String           @id @default(cuid())
+  employeeId   String
+  restaurantId String
+  position     String
+  status       EmploymentStatus @default(PENDING)
+  startedAt    DateTime?
+  endedAt      DateTime?
+  employee     Employee         @relation(fields: [employeeId], references: [id])
+  restaurant   Restaurant       @relation(fields: [restaurantId], references: [id])
+
+  @@unique([employeeId, restaurantId, status])
+  @@index([restaurantId, status])
+}
+
+model Job {
+  id           String           @id @default(cuid())
+  restaurantId String
+  title        String
+  description  String
+  requirements String
+  salary       String?
+  type         JobType
+  city         String
+  createdAt    DateTime         @default(now())
+  restaurant   Restaurant       @relation(fields: [restaurantId], references: [id])
+  applications JobApplication[]
+}
+
+model JobApplication {
+  id        String   @id @default(cuid())
+  jobId     String
+  userId    String
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+  job       Job      @relation(fields: [jobId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([jobId, userId])
+}
+
+model Rating {
+  id               String           @id @default(cuid())
+  raterId          String
+  targetEmployeeId String
+  restaurantId     String
+  type             RatingType
+  score            Float
+  teamwork         Float?
+  reliability      Float?
+  professionalism  Float?
+  communication    Float?
+  workQuality      Float?
+  comment          String?
+  verified         Boolean          @default(false)
+  moderation       ModerationStatus @default(PENDING)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  rater            User             @relation("Rater", fields: [raterId], references: [id])
+  targetEmployee   Employee         @relation("TargetEmployee", fields: [targetEmployeeId], references: [id])
+  restaurant       Restaurant       @relation(fields: [restaurantId], references: [id])
+
+  @@index([targetEmployeeId, type])
+}
+
+model Review {
+  id           String           @id @default(cuid())
+  authorId     String
+  employeeId   String
+  restaurantId String
+  score        Float
+  comment      String
+  status       ModerationStatus @default(PENDING)
+  managerReply String?
+  createdAt    DateTime         @default(now())
+  author       User             @relation(fields: [authorId], references: [id])
+  employee     Employee         @relation(fields: [employeeId], references: [id])
+  restaurant   Restaurant       @relation(fields: [restaurantId], references: [id])
+  reports      Report[]
+}
+
+model RestaurantRating {
+  id           String     @id @default(cuid())
+  authorId     String
+  restaurantId String
+  food         Float
+  service      Float
+  atmosphere   Float
+  cleanliness  Float
+  overall      Float
+  createdAt    DateTime   @default(now())
+  author       User       @relation(fields: [authorId], references: [id])
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+}
+
+model ManagerRating {
+  id               String     @id @default(cuid())
+  authorEmployeeId String
+  managerId        String
+  restaurantId     String
+  leadership       Float
+  communication    Float
+  fairness         Float
+  professionalism  Float
+  scheduling       Float
+  workplace        Float
+  anonymous        Boolean    @default(true)
+  createdAt        DateTime   @default(now())
+  author           Employee   @relation(fields: [authorEmployeeId], references: [id])
+  manager          Manager    @relation("ManagerReceived", fields: [managerId], references: [id])
+  restaurant       Restaurant @relation(fields: [restaurantId], references: [id])
+}
+
+model Badge {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  icon        String
+  description String
+  requirement String
+  employees   EmployeeBadge[]
+}
+
+model EmployeeBadge {
+  employeeId String
+  badgeId    String
+  earnedAt   DateTime @default(now())
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  badge      Badge    @relation(fields: [badgeId], references: [id])
+
+  @@id([employeeId, badgeId])
+}
+
+model QrToken {
+  id         String    @id @default(cuid())
+  employeeId String
+  tokenHash  String    @unique
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  employee   Employee  @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, revokedAt])
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  reporterId String
+  reviewId   String?
+  reason     String
+  details    String?
+  status     String   @default("OPEN")
+  createdAt  DateTime @default(now())
+  reporter   User     @relation(fields: [reporterId], references: [id])
+  review     Review?  @relation(fields: [reviewId], references: [id])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  message   String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
+}
