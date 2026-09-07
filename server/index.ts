@@ -76,6 +76,21 @@ app.get('/api/qr/:token', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
+app.post('/api/qr/:token/ratings', requireAuth, requireRole(Role.CUSTOMER), async (req: AuthRequest, res, next) => {
+  try {
+    const input = z.object({ score: z.number().min(1).max(5), comment: z.string().max(1000).optional() }).parse(req.body)
+    const tokenHash = crypto.createHash('sha256').update(String(req.params.token)).digest('hex')
+    const qr = await prisma.qrToken.findFirst({ where: { tokenHash, revokedAt: null }, include: { employee: true } })
+    if (!qr) return res.status(404).json({ error: 'QR code is invalid or revoked' })
+    const duplicate = await prisma.rating.findFirst({ where: { raterId: req.user!.id, targetEmployeeId: qr.employeeId, type: RatingType.CUSTOMER, createdAt: { gt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } })
+    if (duplicate) return res.status(429).json({ error: 'You have already rated this employee recently' })
+    const employment = await prisma.employment.findFirst({ where: { employeeId: qr.employeeId, status: EmploymentStatus.ACTIVE } })
+    if (!employment) return res.status(400).json({ error: 'Employee is not currently active at a restaurant' })
+    const rating = await prisma.rating.create({ data: { raterId: req.user!.id, targetEmployeeId: qr.employeeId, restaurantId: employment.restaurantId, type: RatingType.CUSTOMER, score: input.score, comment: input.comment, moderation: 'PENDING' } })
+    res.status(201).json(rating)
+  } catch (error) { next(error) }
+})
+
 app.post('/api/ratings', requireAuth, async (req: AuthRequest, res, next) => {
   try {
     const input = ratingSchema.parse(req.body)
@@ -84,6 +99,7 @@ app.post('/api/ratings', requireAuth, async (req: AuthRequest, res, next) => {
     if (target.userId === req.user!.id) return res.status(400).json({ error: 'You cannot rate yourself' })
     if (input.type === RatingType.COWORKER && req.user!.role !== Role.EMPLOYEE) return res.status(403).json({ error: 'Only employees can submit coworker ratings' })
     if (input.type === RatingType.CUSTOMER && req.user!.role !== Role.CUSTOMER) return res.status(403).json({ error: 'Only customers can submit customer ratings' })
+    if (input.type === RatingType.MANAGER) return res.status(400).json({ error: 'Use the manager rating endpoint for manager feedback' })
     const employee = await prisma.employee.findUnique({ where: { id: input.targetEmployeeId }, include: { employments: true } })
     if (!employee) return res.status(404).json({ error: 'Employee not found' })
     const activeAtRestaurant = employee.employments.some((employment) => employment.restaurantId === input.restaurantId && employment.status === EmploymentStatus.ACTIVE)
