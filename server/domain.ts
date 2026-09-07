@@ -1,0 +1,19 @@
+export const RATING_TYPES = {
+  CUSTOMER: 'CUSTOMER',
+  COWORKER: 'COWORKER',
+  MANAGER: 'MANAGER',
+} as const
+
+export const EMPLOYMENT_STATUSES = {
+  PENDING: 'PENDING',
+  ACTIVE: 'ACTIVE',
+  REJECTED: 'REJECTED',
+  ENDED: 'ENDED',
+} as const
+
+export const JOB_TYPES = {
+  FULL_TIME: 'FULL_TIME',
+  PART_TIME: 'PART_TIME',
+  CONTRACT: 'CONTRACT',
+  TEMPORARY: 'TEMPORARY',
+} as const
